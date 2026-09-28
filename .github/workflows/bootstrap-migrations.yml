@@ -1,0 +1,43 @@
+name: bootstrap-migrations
+
+# One-off, manually-triggered helper: this sandbox that builds the repo has
+# no NuGet access, so EF Core migrations cannot be generated locally. This
+# workflow runs `dotnet ef migrations add` on a runner with normal internet
+# access and uploads the generated files as a build artifact for review and
+# commit. Safe to delete once the initial migration has been committed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install dotnet-ef
+        run: dotnet tool install --global dotnet-ef --version 8.*
+
+      - name: Restore
+        working-directory: backend
+        run: dotnet restore
+
+      - name: Add InitialCreate migration
+        working-directory: backend
+        env:
+          ConnectionStrings__Default: "Host=localhost;Port=5432;Database=westcoastfitness;Username=westcoastfitness;Password=westcoastfitness_dev_only"
+          Jwt__SigningKey: "ci-bootstrap-only-signing-key-not-used-at-runtime"
+        run: |
+          dotnet ef migrations add InitialCreate \
+            --project src/WestCoastFitness.Infrastructure \
+            --startup-project src/WestCoastFitness.Api \
+            --output-dir Persistence/Migrations
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: initial-migration
+          path: backend/src/WestCoastFitness.Infrastructure/Persistence/Migrations/
